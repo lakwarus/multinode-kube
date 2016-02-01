@@ -43,9 +43,13 @@ nova boot \
 --flavor 8ca857cd-a3c8-4fac-afaf-05359eb88cd9 \
 --security-group kubernetes \
 --user-data files/master.yaml \
-$OS_USERNAME-kube-master > /dev/null 2>&1
+$OS_USERNAME-kube-master || {
+    echo "Failed."
+    exit 100
+}
 
 # echo -n "Waiting for the instance to be provisioned."
+before_time=`date +%s`
 while [ 1 ]; do
     sleep 3
     tmp=`nova list |grep $OS_USERNAME-kube-master | awk '{ print $12 }' 2> /dev/null`
@@ -56,6 +60,14 @@ while [ 1 ]; do
         echo "OK"
         break
     fi
+
+    now_time=`date +%s`
+    spent_time=`expr $now_time - $before_time`
+    if [ $spent_time -gt 300 ]; then
+        echo "TIMEOUT [5m]"
+        break
+    fi
+
     echo -n "."
 done
 echo "K8S Master: ${IP}"
@@ -63,14 +75,14 @@ echo "K8S Master: ${IP}"
 cp -f files/node.yaml ./node.yaml
 sed -i -e "s/<master-private-ip>/$IP/g" ./node.yaml
 
-echo -n "Number of k8s nodes to create> "
+echo -n "Number of K8S Nodes (Minions) to create> "
 read nodes
 re='^[0-9]+$'
 
 while [ 1 ]; do
     if ! [[ $nodes =~ $re ]] ; then
         echo "error: Not a number"
-    echo -n "Number of k8s nodes to create> "
+    echo -n "Number of K8S Nodes (Minions) to create> "
     read nodes
     else
         break
@@ -87,10 +99,13 @@ let node=node+1
     --flavor 3 \
     --security-group kubernetes \
     --user-data node.yaml \
-    $OS_USERNAME-node$node > /dev/null 2>&1
+    $OS_USERNAME-node$node > /dev/null 2>&1 || {
+        echo "Failed [${node}]"
+    }
 done
 
 echo -n "Waiting for API Server."
+before_time=`date +%s
 while [ 1 ]
 do
     sleep 1
@@ -100,10 +115,18 @@ do
         break
     fi
 
+    now_time=`date +%s`
+    spent_time=`expr $now_time - $before_time`
+    if [ $spent_time -gt 300 ]; then
+        echo "TIMEOUT [5m] "
+        break
+    fi
+
     echo -n "."
 done
 
 echo -n "Waiting for the Node/s to register."
+before_time=`date +%s
 while [ 1 ]; do
     sleep 5
 
@@ -115,6 +138,13 @@ while [ 1 ]; do
 
     if [ ${#arr[@]} -eq `expr $nodes + 1` ]; then
         echo "OK"
+        break
+    fi
+
+    now_time=`date +%s`
+    spent_time=`expr $now_time - $before_time`
+    if [ $spent_time -gt 600 ]; then
+        echo "TIMEOUT [10m] "
         break
     fi
 
