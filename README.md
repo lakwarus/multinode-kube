@@ -6,7 +6,7 @@ change OS_USERNAME in openrc.sh
 
 export OS_USERNAME="lakmal"
 
-## How ro run
+## How to run
 
 `./kube.sh`
 
