@@ -19,7 +19,7 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
     --flavor 8ca857cd-a3c8-4fac-afaf-05359eb88cd9 \
     --security-group kubernetes \
     --user-data files/master.yaml \
-    $OS_USERNAME-kube-master
+    $OS_USERNAME-kube-master > /dev/null 2>&1
     sleep 10
     tmp=`nova list |grep $OS_USERNAME-kube-master | awk '{ print $12 }'`
     IP=$(echo $tmp | sed 's/dev_private_network=//g')
@@ -50,7 +50,7 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
         --flavor 3 \
         --security-group kubernetes \
         --user-data node.yaml \
-        $OS_USERNAME-node$node
+        $OS_USERNAME-node$node > /dev/null 2>&1 
     done
     echo -n "Waiting for API  "
     while [ 1 ]
@@ -61,8 +61,12 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
 	    break
         fi
     done
+    sleep 30
     echo -e "OK"
+    echo "Kubernetes Master IP : $IP"
+    echo "kubectl -s http://$IP:8080 get nodes"
     kubectl -s http://$IP:8080 get nodes
+    echo "If Kubernetes Nodes listed above... wait for few seconds and try.."
 else
     # Unknown.
     echo "Setting up prerequisite..."
