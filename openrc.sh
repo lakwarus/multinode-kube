@@ -20,7 +20,7 @@ export OS_TENANT_NAME="dev"
 export OS_USERNAME="lakmal"
 
 # With Keystone you pass the keystone password.
-echo "Please enter your OpenStack Password: "
+echo -n "Please enter your OpenStack Password> "
 read -sr OS_PASSWORD_INPUT
 export OS_PASSWORD=$OS_PASSWORD_INPUT
 
