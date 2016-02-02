@@ -58,8 +58,19 @@ if [[ "$OSTYPE" == "linux-gnu" ]]; then
     }
 
 elif [[ "$OSTYPE" == "darwin"* ]]; then
-    sudo easy_install pip > /dev/null 2>&1
-    sudo pip install rackspace-novaclient > /dev/null 2>&1
+    command -v pip >/dev/null 2>&1 && {
+        command -v nova >/dev/null 2>&1 && {
+            echoDim "Prerequisites already installed."
+    	} || {
+	    # nova absent
+    	    sudo pip install python-novaclient >/dev/null 2>&1
+	}
+     } || {
+     	   # pip absent
+	   echoDim "Installing Python PIP and nova-client..."
+	   sudo easy_install pip > /dev/null 2>&1
+	   sudo pip install python-novaclient >/dev/null 2>&1
+   	}	
 else
     # Unknown.
     echoError "Unsupported OS!"
