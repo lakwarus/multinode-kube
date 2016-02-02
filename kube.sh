@@ -13,7 +13,27 @@ function cleanAndExit () {
 }
 
 function echoDim () {
-    echo -e "\e[2m${1}\e[0m"
+    if [ -z "$2" ]; then
+        echo $'\e[2m'"${1}"$'\e[0m'
+    else
+        echo -n $'\e[2m'"${1}"$'\e[0m'
+    fi
+}
+
+function echoError () {
+    echo $'\e[1;31m'"${1}"$'\e[0m'
+}
+
+function echoSuccess () {
+    echo $'\e[1;32m'"${1}"$'\e[0m'
+}
+
+function echoDot () {
+    echoDim "." "append"
+}
+
+function echoBold () {
+    echo $'\e[1m'"${1}"$'\e[0m'
 }
 
 echoDim "Setting up prerequisites..."
@@ -31,7 +51,7 @@ if [[ "$OSTYPE" == "linux-gnu" ]]; then
         # pip absent
         echoDim "Installing Python PIP and nova-client..."
         python -mplatform | grep Ubuntu && sudo apt-get install -y git python python-pip  >/dev/null 2>&1 || {
-            echo -e "\e[1;31mUnrecognized OS. Only supports Ubuntu at the moment.\e[0m"
+            echoError "Unrecognized OS. Only supports Ubuntu at the moment."
             cleanAndExit 100
         }
         pip install python-novaclient >/dev/null 2>&1
@@ -42,7 +62,7 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
     sudo pip install rackspace-novaclient > /dev/null 2>&1
 else
     # Unknown.
-    echo -e "\e[1;31mUnsupported OS!\e[0m"
+    echoError "Unsupported OS!"
     cleanAndExit 100
 fi
 
@@ -55,11 +75,12 @@ if [ ! -f kube.pem ]; then
     chmod 600 kube.pem
 fi
 
-echo -ne "\e[2mSetting up K8S Master.\e[0m"
+echoDim "Setting up K8S Master." "append"
 # Check if K8S Master already exists, TODO: ask to delete if true, get IP and continue if delete=false
 master_exists=`nova list | grep $OS_USERNAME-kube-master 2> /dev/null`
 if [ -n "$master_exists" ]; then
-    echo -e "\e[1;31mFAILED\e[0m: An instance already exists with name '${OS_USERNAME}-kube-master'."
+    echoError "FAILED"
+    echoError "An instance already exists with name '${OS_USERNAME}-kube-master'."
     cleanAndExit 100
 fi
 
@@ -70,7 +91,7 @@ nova boot \
 --security-group kubernetes \
 --user-data files/master.yaml \
 $OS_USERNAME-kube-master  >/dev/null 2>&1 || {
-    echo -e "\e[1;31mFAILED\e[0m"
+    echoError "FAILED"
     cleanAndExit 100
 }
 
@@ -83,20 +104,21 @@ while [ 1 ]; do
     IP=${IP//[[:blank:]]/}
     # echo "${IP//|}"
     if [ ${#IP} -gt 4 ]; then
-        echo -e "\e[1;32mOK\e[0m"
+        echoSuccess "OK"
         break
     fi
 
     now_time=`date +%s`
     spent_time=`expr $now_time - $before_time`
     if [ $spent_time -gt 300 ]; then
-        echo -e "\e[1;31mTIMEOUT [5m]\e[0m"
+        echoError "TIMEOUT [5m]"
         cleanAndExit 100
     fi
 
-    echo -ne "\e[2m.\e[0m"
+    echoDot
 done
-echoDim "K8S Master:\e[0m \e[1m${IP}"
+echoDim "K8S Master:" "append"
+echoBold "${IP}"
 
 cp -f files/node.yaml ./node.yaml
 sed -i -e "s/<master-private-ip>/$IP/g" ./node.yaml
@@ -108,8 +130,8 @@ re='^[0-9]+$'
 while [ 1 ]; do
     if ! [[ $nodes =~ $re ]] ; then
         echo "error: Not a number"
-    echo -n "Number of K8S Nodes (Minions) to create> "
-    read nodes
+        echo -n "Number of K8S Nodes (Minions) to create> "
+        read nodes
     else
         break
     fi
@@ -119,15 +141,16 @@ node=0
 failed=0
 while [  $node -lt $nodes ]; do
     let node=node+1
-    echo -en "\e[2mSetting up K8S Node $node...\e[0m"
+    echoDim "Setting up K8S Node $node..." "append"
     # Check if each node exists, TODO: ask to delete if true
     node_exists=`nova list | grep $OS_USERNAME-node$node 2> /dev/null`
     if [ -n "$node_exists" ]; then
-        echo -e "\e[1;31mFAILED [${node}]\e[0m: An instance already exists with name '${OS_USERNAME}-node${node}'."
+        echoError "FAILED [${node}]"
+        echoError "An instance already exists with name '${OS_USERNAME}-node${node}'."
         let "failed++"
 
         if [ $failed -eq $node ]; then
-            echo "Couldn't create any Nodes. Check output for errors."
+            echoError "Couldn't create any Nodes. Check output for errors."
             cleanAndExit 100
         else
             break
@@ -140,33 +163,33 @@ while [  $node -lt $nodes ]; do
     --flavor 3 \
     --security-group kubernetes \
     --user-data node.yaml \
-    $OS_USERNAME-node$node > /dev/null 2>&1 && echo -e "\e[1;32mOK\e[0m" || {
-        echo -e "\e[1;31mFAILED [${node}]\e[0m"
+    $OS_USERNAME-node$node > /dev/null 2>&1 && echoSuccess "OK" || {
+        echoError "FAILED [${node}]"
     }
 done
 
-echo -ne "\e[2mWaiting for API Server.\e[0m"
+echoDim "Waiting for API Server." "append"
 before_time=`date +%s`
 while [ 1 ]
 do
     sleep 1
     if curl -m1 http://$IP:8080/api/v1/namespaces/default/pods > /dev/null 2>&1
     then
-        echo -e "\e[1;32mOK\e[0m"
+        echoSuccess "OK"
         break
     fi
 
     now_time=`date +%s`
     spent_time=`expr $now_time - $before_time`
     if [ $spent_time -gt 300 ]; then
-        echo -e "\e[1;31mTIMEOUT [5m]\e[0m"
+        echoError "TIMEOUT [5m]"
         cleanAndExit 100
     fi
 
-    echo -en "\e[2m.\e[0m"
+    echoDot
 done
 
-echo -ne "\e[2mWaiting for the Node/s to register.\e[0m"
+echoDim "Waiting for the Node/s to register." "append"
 before_time=`date +%s`
 while [ 1 ]; do
     sleep 5
@@ -178,18 +201,18 @@ while [ 1 ]; do
     done <<< "$node_list"
 
     if [ ${#arr[@]} -eq `expr $nodes + 1` ]; then
-        echo -e "\e[1;32mOK\e[0m"
+        echoSuccess "OK"
         break
     fi
 
     now_time=`date +%s`
     spent_time=`expr $now_time - $before_time`
     if [ $spent_time -gt 600 ]; then
-        echo -e "\e[1;31mTIMEOUT [10m]\e[0m"
+        echoError "TIMEOUT [10m]"
         cleanAndExit 100
     fi
 
-    echo -en "\e[2m.\e[0m"
+    echoDot
 done
 
 echo
@@ -204,34 +227,34 @@ kubectl -s http://$IP:8080 create -f files/kube-system.yaml  >/dev/null 2>&1 && 
 kubectl -s http://$IP:8080 create -f files/kube-ui/kube-ui-rc.yaml --namespace=kube-system  >/dev/null 2>&1 && \
 kubectl -s http://$IP:8080 create -f files/kube-ui/kube-ui-svc.yaml --namespace=kube-system  >/dev/null 2>&1 && {
     echoDim "K8S UI Added."
-    echo -ne "\e[2mWaiting for the K8S UI to start.\e[0m"
+    echoDim "Waiting for the K8S UI to start." "append"
     before_time=`date +%s`
     while [ 1 ]; do
         sleep 2
 
         ui_status=`curl --write-out %{http_code} --silent --output /dev/null http://${IP}:8080/api/v1/proxy/namespaces/kube-system/services/kube-ui/#/dashboard/`
         if [ "${ui_status}" -eq 200 ]; then
-            echo -e "\e[1;32mOK\e[0m"
-            echo -e "\e[2mK8S UI Started: [URL]\e[0m \e[1mhttp://${IP}:8080/ui\e[0m"
+            echoSuccess "OK"
+            echoDim "K8S UI Started:" "append"
+            echoBold "http://${IP}:8080/ui"
             break
         fi
 
         now_time=`date +%s`
         spent_time=`expr $now_time - $before_time`
         if [ $spent_time -gt 300 ]; then
-            echo -e "\e[1;31mTIMEOUT [5m]\e[0m"
+            echoError "TIMEOUT [5m]"
             cleanAndExit 100
         fi
 
-        echo -en "\e[2m.\e[0m"
+        echoDot
     done
 } || {
-    echo -e "\e[31mFailed to add K8S UI\e[0m"
+    echoError "Failed to add K8S UI"
 }
 
-echo -e "\e[1mK8S Cluster setup complete.\e[0m"
+echoSuccess "K8S Cluster setup complete."
 cleanAndExit
 
 # TODO:
 # Check if key-pair exists, ask to add this machine's public key, if not ask to delete, crete if key pair doesn't exist
-# call a clean method instead of exit 100
