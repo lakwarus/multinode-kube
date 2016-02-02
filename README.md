@@ -16,3 +16,7 @@ export OS_USERNAME="lakmal"
 `./kube.sh`
 
 This will install the prerequisites needed and setup the Kubernetes Master and Minion nodes per your input.
+
+## Tested on
+1. Mac
+2. Ubuntu
