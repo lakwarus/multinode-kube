@@ -12,20 +12,24 @@ function cleanAndExit () {
     exit $1
 }
 
-echo -e "\e[2mSetting up prerequisites...\e[0m"
+function echoDim () {
+    echo -e "\e[2m${1}\e[0m"
+}
+
+echoDim "Setting up prerequisites..."
 
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
     command -v pip >/dev/null 2>&1 && {
         command -v nova >/dev/null 2>&1 && {
-            echo -e "\e[2mPrerequisites already installed.\e[0m"
+            echoDim "Prerequisites already installed."
         } || {
             # nova absent
-            echo -e "\e[2mInstalling nova-client...\e[0m"
+            echoDim "Installing nova-client..."
             pip install python-novaclient >/dev/null 2>&1
         }
     } || {
         # pip absent
-        echo -e "\e[2mInstalling Python PIP and nova-client...\e[0m"
+        echoDim "Installing Python PIP and nova-client..."
         python -mplatform | grep Ubuntu && sudo apt-get install -y git python python-pip  >/dev/null 2>&1 || {
             echo -e "\e[1;31mUnrecognized OS. Only supports Ubuntu at the moment.\e[0m"
             cleanAndExit 100
@@ -46,7 +50,7 @@ source openrc.sh
 echo
 
 if [ ! -f kube.pem ]; then
-    echo -e "\e[2mCreating 'kube' key-pair...\e[0m"
+    echoDim "Creating 'kube' key-pair..."
     nova keypair-add kube > kube.pem
     chmod 600 kube.pem
 fi
@@ -92,7 +96,7 @@ while [ 1 ]; do
 
     echo -ne "\e[2m.\e[0m"
 done
-echo -e "\e[2mK8S Master:\e[0m \e[1m${IP}\e[0m"
+echoDim "K8S Master:\e[0m \e[1m${IP}"
 
 cp -f files/node.yaml ./node.yaml
 sed -i -e "s/<master-private-ip>/$IP/g" ./node.yaml
@@ -195,11 +199,32 @@ kubectl -s http://$IP:8080 get nodes
 echo
 
 # add kube-ui rc and svc
-echo -e "\e[2mAdding K8S UI...\e[0m"
+echoDim "Adding K8S UI..."
 kubectl -s http://$IP:8080 create -f files/kube-system.yaml  >/dev/null 2>&1 && \
 kubectl -s http://$IP:8080 create -f files/kube-ui/kube-ui-rc.yaml --namespace=kube-system  >/dev/null 2>&1 && \
 kubectl -s http://$IP:8080 create -f files/kube-ui/kube-ui-svc.yaml --namespace=kube-system  >/dev/null 2>&1 && {
-    echo -e "\e[2mK8S UI Added.\e[0m [URL] \e[1mhttp://${IP}:8080/ui\e[0m"
+    echoDim "K8S UI Added."
+    echo -ne "\e[2mWaiting for the K8S UI to start.\e[0m"
+    before_time=`date +%s`
+    while [ 1 ]; do
+        sleep 2
+
+        ui_status=`curl --write-out %{http_code} --silent --output /dev/null http://${IP}:8080/api/v1/proxy/namespaces/kube-system/services/kube-ui/#/dashboard/`
+        if [ "${ui_status}" -eq 200 ]; then
+            echo -e "\e[1;32mOK\e[0m"
+            echo -e "\e[2mK8S UI Started: [URL]\e[0m \e[1mhttp://${IP}:8080/ui\e[0m"
+            break
+        fi
+
+        now_time=`date +%s`
+        spent_time=`expr $now_time - $before_time`
+        if [ $spent_time -gt 300 ]; then
+            echo -e "\e[1;31mTIMEOUT [5m]\e[0m"
+            cleanAndExit 100
+        fi
+
+        echo -en "\e[2m.\e[0m"
+    done
 } || {
     echo -e "\e[31mFailed to add K8S UI\e[0m"
 }
