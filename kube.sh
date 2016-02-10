@@ -232,9 +232,40 @@ echo "==================="
 kubectl -s http://$IP:8080 get nodes
 echo
 
+# add SkyDNS
+echoDim "Adding SkyDNS ..."
+kubectl -s http://$IP:8080 create -f files/kube-system.yaml  >/dev/null 2>&1 && \
+kubectl -s http://$IP:8080 create -f files/dns-service.yaml --namespace=kube-system  >/dev/null 2>&1 && \
+kubectl -s http://$IP:8080 create -f files/dns-controller.yaml --namespace=kube-system  >/dev/null 2>&1 && {
+    echoDim "SkyDNS Added."
+    echoDim "Waiting for the SkyDNS to start." "append"
+    before_time=`date +%s`
+    while [ 1 ]; do
+        sleep 2
+
+        ui_status=`curl --write-out %{http_code} --silent --output /dev/null http://${IP}:8080/api/v1/proxy/namespaces/kube-system/services/skydns`
+        if [ "${ui_status}" -eq 200 ]; then
+            echoSuccess "OK"
+            echoDim "SkyDNS Started:" "append"
+            break
+        fi
+
+        now_time=`date +%s`
+        spent_time=`expr $now_time - $before_time`
+        if [ $spent_time -gt 300 ]; then
+            echoError "TIMEOUT [5m]"
+            cleanAndExit 100
+        fi
+
+        echoDot
+    done
+} || {
+    echoError "Failed to add SkyDNS"
+}
+
+
 # add kube-ui rc and svc
 echoDim "Adding K8S UI..."
-kubectl -s http://$IP:8080 create -f files/kube-system.yaml  >/dev/null 2>&1 && \
 kubectl -s http://$IP:8080 create -f files/kube-ui/kube-ui-rc.yaml --namespace=kube-system  >/dev/null 2>&1 && \
 kubectl -s http://$IP:8080 create -f files/kube-ui/kube-ui-svc.yaml --namespace=kube-system  >/dev/null 2>&1 && {
     echoDim "K8S UI Added."
@@ -263,6 +294,7 @@ kubectl -s http://$IP:8080 create -f files/kube-ui/kube-ui-svc.yaml --namespace=
 } || {
     echoError "Failed to add K8S UI"
 }
+
 
 echoSuccess "K8S Cluster setup complete."
 cleanAndExit

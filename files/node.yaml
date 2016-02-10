@@ -87,6 +87,8 @@ coreos:
         --hostname-override=${DEFAULT_IPV4} \
         --api-servers=<master-private-ip>:8080 \
         --allow-privileged=true \
+        --cluster_dns=10.100.0.10 \
+        --cluster_domain=cluster.local \
         --logtostderr=true \
         --cadvisor-port=4194 \
         --healthz-bind-address=0.0.0.0 \
